@@ -40,16 +40,25 @@ class QueryRequest(BaseModel):
     query: str
     session_id: Optional[str] = None
 
+class SourceItem(BaseModel):
+    """A single source citation, optionally linking to the lesson/course video"""
+    text: str
+    link: Optional[str] = None
+
 class QueryResponse(BaseModel):
     """Response model for course queries"""
     answer: str
-    sources: List[str]
+    sources: List[SourceItem]
     session_id: str
 
 class CourseStats(BaseModel):
     """Response model for course statistics"""
     total_courses: int
     course_titles: List[str]
+
+class ClearSessionRequest(BaseModel):
+    """Request model for clearing a session"""
+    session_id: str
 
 # API Endpoints
 
@@ -73,6 +82,15 @@ async def query_documents(request: QueryRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.post("/api/session/clear")
+async def clear_session(request: ClearSessionRequest):
+    """Clear a session's conversation history"""
+    try:
+        rag_system.session_manager.clear_session(request.session_id)
+        return {"success": True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.get("/api/courses", response_model=CourseStats)
 async def get_course_stats():
     """Get course analytics and statistics"""
@@ -88,6 +106,15 @@ async def get_course_stats():
 @app.on_event("startup")
 async def startup_event():
     """Load initial documents on startup"""
+    # Surface a bad API key here rather than as a 401 on every chat query.
+    # The app still starts so the course list and frontend remain usable.
+    config_problem = config.validate()
+    if config_problem:
+        print("=" * 70)
+        print(f"CONFIG WARNING: {config_problem}")
+        print("Chat queries will fail until this is fixed.")
+        print("=" * 70)
+
     docs_path = "../docs"
     if os.path.exists(docs_path):
         print("Loading initial documents...")

@@ -1,21 +1,42 @@
 import anthropic
 from typing import List, Optional, Dict, Any
 
+
+def _extract_text(response) -> str:
+    """Pull the first text block out of an API response.
+
+    The first content block is not always text — the model may lead with a
+    thinking or tool_use block, and a max_tokens truncation can leave no text
+    block at all. Indexing content[0].text blindly turns those cases into a
+    500, so scan for the text instead.
+    """
+    for block in response.content:
+        if getattr(block, "type", None) == "text":
+            return block.text
+
+    return ("The model returned no text response. It may have been cut short by "
+            "the token limit — try a more specific question.")
+
+
 class AIGenerator:
     """Handles interactions with Anthropic's Claude API for generating responses"""
     
     # Static system prompt to avoid rebuilding on each call
-    SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to a comprehensive search tool for course information.
+    SYSTEM_PROMPT = """ You are an AI assistant specialized in course materials and educational content with access to tools for course information.
 
-Search Tool Usage:
-- Use the search tool **only** for questions about specific course content or detailed educational materials
-- **One search per query maximum**
-- Synthesize search results into accurate, fact-based responses
-- If search yields no results, state this clearly without offering alternatives
+Available Tools:
+- **search_course_content**: Semantic search over course content. Use **only** for questions about specific course content or detailed educational materials.
+- **get_course_outline**: Returns a course's title, course link, and full lesson list. Use for questions about a course's outline, structure, syllabus, or which lessons it contains.
+
+Tool Usage:
+- **One tool call per query maximum**
+- Synthesize tool results into accurate, fact-based responses
+- If a tool yields no results, state this clearly without offering alternatives
 
 Response Protocol:
-- **General knowledge questions**: Answer using existing knowledge without searching
-- **Course-specific questions**: Search first, then answer
+- **General knowledge questions**: Answer using existing knowledge without using tools
+- **Course-specific questions**: Use the appropriate tool first, then answer
+- **Course outline questions**: Use get_course_outline and always report the course title, the course link, and every lesson's number and title
 - **No meta-commentary**:
  - Provide direct answers only — no reasoning process, search explanations, or question-type analysis
  - Do not mention "based on the search results"
@@ -77,15 +98,35 @@ Provide only the direct answer to what was asked.
             api_params["tool_choice"] = {"type": "auto"}
         
         # Get response from Claude
-        response = self.client.messages.create(**api_params)
-        
+        response = self._create_message(**api_params)
+
         # Handle tool execution if needed
         if response.stop_reason == "tool_use" and tool_manager:
             return self._handle_tool_execution(response, api_params, tool_manager)
-        
+
         # Return direct response
-        return response.content[0].text
-    
+        return _extract_text(response)
+
+    def _create_message(self, **api_params):
+        """Call the Anthropic API, translating API errors into readable messages.
+
+        Without this, an unset or placeholder ANTHROPIC_API_KEY surfaces as a bare
+        401 that app.py turns into a 500 and the UI shows as "Query failed".
+        """
+        try:
+            return self.client.messages.create(**api_params)
+        except anthropic.AuthenticationError as e:
+            raise RuntimeError(
+                "Anthropic rejected the request: ANTHROPIC_API_KEY is missing, invalid, "
+                "or still the placeholder from .env.example. Set a real key in .env."
+            ) from e
+        except anthropic.RateLimitError as e:
+            raise RuntimeError(
+                "Anthropic rate limit reached. Wait a moment and try again."
+            ) from e
+        except anthropic.APIError as e:
+            raise RuntimeError(f"Anthropic API error: {e}") from e
+
     def _handle_tool_execution(self, initial_response, base_params: Dict[str, Any], tool_manager):
         """
         Handle execution of tool calls and get follow-up response.
@@ -131,5 +172,5 @@ Provide only the direct answer to what was asked.
         }
         
         # Get final response
-        final_response = self.client.messages.create(**final_params)
-        return final_response.content[0].text
+        final_response = self._create_message(**final_params)
+        return _extract_text(final_response)

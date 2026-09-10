@@ -245,6 +245,19 @@ header h1 {
     color: var(--text-secondary);
 }
 
+.source-link {
+    color: var(--text-secondary);
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: color 0.15s, text-decoration-color 0.15s;
+}
+
+.source-link:hover,
+.source-link:focus-visible {
+    color: var(--text-primary);
+    text-decoration-color: currentColor;
+}
+
 /* Markdown formatting styles */
 .message-content h1,
 .message-content h2,
@@ -445,6 +458,34 @@ header h1 {
     margin: 0.5rem 0;
 }
 
+/* New Chat Button */
+.new-chat-button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 0.5rem 0;
+    border: none;
+    background: none;
+    outline: none;
+    transition: color 0.2s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.new-chat-button:hover,
+.new-chat-button:focus {
+    color: var(--primary-color);
+}
+
+/* Match the marker slot used by the collapsible sidebar headers */
+.new-chat-button::before {
+    content: '+';
+}
+
 /* Sidebar Headers */
 .stats-header,
 .suggested-header {
@@ -480,10 +521,18 @@ header h1 {
 .stats-header::before,
 .suggested-header::before {
     content: '▶';
-    display: inline-block;
-    margin-right: 0.5rem;
     transition: transform 0.2s ease;
+}
+
+/* Shared marker slot so all sidebar labels start at the same x */
+.new-chat-button::before,
+.stats-header::before,
+.suggested-header::before {
+    display: inline-block;
+    width: 0.75rem;
+    margin-right: 0.5rem;
     font-size: 0.75rem;
+    text-align: center;
 }
 
 details[open] .stats-header::before,

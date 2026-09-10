@@ -17,7 +17,15 @@ chmod +x run.sh && ./run.sh
 cd backend && uv run uvicorn app:app --reload --port 8000
 ```
 
-The app serves the frontend at `http://localhost:8000` and the API docs at `http://localhost:8000/docs`. There is no build step, linter, or test suite configured in this repo.
+```bash
+# Run the test suite (mock-only: no API key or network needed)
+uv run pytest
+uv run pytest backend/tests/test_search_tools.py -v   # a single module
+```
+
+The app serves the frontend at `http://localhost:8000` and the API docs at `http://localhost:8000/docs`. There is no build step or linter configured in this repo.
+
+Tests live in `backend/tests/` and run under `[tool.pytest.ini_options]` in `pyproject.toml`, which sets `pythonpath = ["backend"]` — backend modules import each other flat (`from vector_store import VectorStore`), so `backend/` must be on `sys.path`. Every test mocks the Anthropic client and the `VectorStore`, so the suite never makes network calls.
 
 Requires a `.env` file in the repo root with `ANTHROPIC_API_KEY=...` (see `.env.example`).
 
